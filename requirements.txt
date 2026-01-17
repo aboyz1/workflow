@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+GitPython
+pydantic-settings
+uuid
+shutil
+google-cloud-build
+google-cloud-storage
