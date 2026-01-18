@@ -4,7 +4,8 @@ class Settings(BaseSettings):
     gcp_project_id: str
     gcp_region: str
     gar_repository_name: str
-    gcp_storage_bucket: str = "" # Optional, can default to {project_id}_cloudbuild
+    gcp_storage_bucket: str = "repo_storage"
+
 
 
     class Config:

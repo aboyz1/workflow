@@ -51,7 +51,8 @@ def build_and_push_task(github_url: str, request_id: str):
         
         # 4. Upload to GCS
         storage_client = storage.Client(project=settings.gcp_project_id)
-        bucket_name = settings.gcp_storage_bucket or f"{settings.gcp_project_id}_cloudbuild"
+        bucket_name = settings.gcp_storage_bucket
+
         
         # Ensure bucket exists (best effort)
         try:
