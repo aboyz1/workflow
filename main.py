@@ -40,7 +40,7 @@ def build_and_push_task(github_url: str, request_id: str):
         logger.info(f"Cloning {github_url} into {temp_dir}")
         git.Repo.clone_from(github_url, temp_dir)
         
-        # 2. Check for Dockerfile (optional sanity check before uploading)
+        # 2. Check for Dockerfile
         if not os.path.exists(os.path.join(temp_dir, "Dockerfile")):
              logger.error("No Dockerfile found.")
              return
@@ -52,16 +52,12 @@ def build_and_push_task(github_url: str, request_id: str):
         # 4. Upload to GCS
         storage_client = storage.Client(project=settings.gcp_project_id)
         bucket_name = settings.gcp_storage_bucket
-
         
         # Ensure bucket exists (best effort)
         try:
              bucket = storage_client.get_bucket(bucket_name)
         except Exception:
-             logger.info(f"Bucket {bucket_name} not found, using default staging bucket logic from Cloud Build or erroring if not exists.")
-             # Fallback: Let Cloud Build handle it or assume user provided a valid bucket
-             # For simplicity, we assume the bucket exists or we create it.
-             # In production, infrastructure should provision this.
+             logger.info(f"Bucket {bucket_name} not found, using default staging bucket logic.")
              bucket = storage_client.bucket(bucket_name)
 
         blob_name = f"source/{request_id}.zip"
@@ -79,7 +75,6 @@ def build_and_push_task(github_url: str, request_id: str):
         build = cloudbuild_v1.Build()
         
         # Define the build steps
-        # Equivalent to: docker build -t {image_tag} . && docker push {image_tag}
         build.steps = [
             {
                 "name": "gcr.io/cloud-builders/docker",
@@ -99,15 +94,9 @@ def build_and_push_task(github_url: str, request_id: str):
         }
         
         build.images = [image_tag]
-        build.projectId = settings.gcp_project_id
         
         logger.info("Triggering Cloud Build...")
         operation = build_client.create_build(project_id=settings.gcp_project_id, build=build)
-        
-        # We catch the result locally for logging, but this blocks the thread if we .result(). 
-        # Since this is run in BackgroundTasks, blocking here is okay-ish for a worker, 
-        # but to be truly async we might just fire and forget or update a database status.
-        # For this requirement, we'll wait for the trigger response (not the full build)
         
         logger.info(f"Cloud Build triggered: {operation.metadata.build.id}")
         logger.info(f"Build logs: {operation.metadata.build.log_url}")
@@ -115,7 +104,7 @@ def build_and_push_task(github_url: str, request_id: str):
     except Exception as e:
         logger.error(f"Build failed: {e}")
     finally:
-        # Cleanup local files
+        # Cleanup
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
         if os.path.exists(archive_path):
