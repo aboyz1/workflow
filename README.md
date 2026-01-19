@@ -34,7 +34,8 @@ A standard FastAPI service to deploy Docker images from a GitHub repository to G
     | `GCP_PROJECT_ID` | `your-project-id` | Your Google Cloud Project ID |
     | `GCP_REGION` | `us-central1` | Region for GAR and Cloud Build |
     | `GAR_REPOSITORY_NAME` | `your-repo` | Name of the Artifact Registry repo |
-    | `GCP_STORAGE_BUCKET` | `repo_storage` | (Optional) Staging bucket for source code. Defaults to `repo_storage` |
+    | `GCP_STORAGE_BUCKET` | `perd-fd33f.firebasestorage.app` | (Optional) Staging bucket for source code. Defaults to `perd-fd33f.firebasestorage.app` |
+
 
     | `GOOGLE_APPLICATION_CREDENTIALS` | `/etc/secrets/google-credentials.json` | Path to the secret credential file (see below) |
 
