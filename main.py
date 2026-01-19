@@ -101,6 +101,21 @@ def build_and_push_task(github_url: str, request_id: str):
         logger.info(f"Cloud Build triggered: {operation.metadata.build.id}")
         logger.info(f"Build logs: {operation.metadata.build.log_url}")
 
+        # Wait for the build to complete to ensure we can safely delete the source
+        # This blocks the background task worker, but ensures cleanup.
+        # Given high volume, consider scaling workers or using a separate cleaner if this becomes a bottleneck.
+        logger.info("Waiting for build to complete...")
+        result = operation.result() 
+        logger.info(f"Build finished status: {result.status}")
+        
+        # Cleanup GCS blob
+        try:
+            logger.info(f"Deleting source blob: {blob_name}")
+            blob.delete()
+        except Exception as e:
+            logger.warning(f"Failed to delete source blob {blob_name}: {e}")
+
+
     except Exception as e:
         logger.error(f"Build failed: {e}")
     finally:
