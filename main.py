@@ -193,7 +193,12 @@ def check_status(request_id):
         doc = doc_ref.get()
         
         if doc.exists:
-            return jsonify(doc.to_dict())
+            data = doc.to_dict()
+            return jsonify({
+                "status": data.get("status"),
+                "request_id": request_id
+            })
+
         else:
             return jsonify({"error": "Deployment not found"}), 404
     except Exception as e:
