@@ -27,32 +27,53 @@ def zip_directory(folder_path, output_path):
                 arcname = os.path.relpath(file_path, folder_path)
                 zipf.write(file_path, arcname)
 
+def update_firestore_status(request_id, status, metadata=None):
+    """Helper to update Firestore status."""
+    try:
+        db = firestore.Client(project=settings.gcp_project_id)
+        doc_ref = db.collection("deployments").document(request_id)
+        
+        data = {
+            "status": status,
+            "timestamp": datetime.datetime.now(datetime.timezone.utc)
+        }
+        if metadata:
+            data.update(metadata)
+            
+        doc_ref.set(data, merge=True)
+        logger.info(f"Updated Firestore {request_id} to {status}")
+    except Exception as e:
+        logger.error(f"Failed to update Firestore for {request_id}: {e}")
+
 def build_and_push_task(github_url: str, request_id: str):
     temp_dir = f"temp_build_{request_id}"
     archive_path = f"{temp_dir}.zip"
     
     logger.info(f"Starting build task for {github_url} with ID {request_id}")
     
+    # 1. Update status to IN_PROGRESS (optional, as PENDING is set initially)
+    update_firestore_status(request_id, "IN_PROGRESS")
+
     try:
-        # 1. Clone Repository
+        # 2. Clone Repository
         os.makedirs(temp_dir, exist_ok=True)
         logger.info(f"Cloning {github_url} into {temp_dir}")
         git.Repo.clone_from(github_url, temp_dir)
         
-        # 2. Check for Dockerfile
+        # 3. Check for Dockerfile
         if not os.path.exists(os.path.join(temp_dir, "Dockerfile")):
              logger.error("No Dockerfile found.")
+             update_firestore_status(request_id, "FAILURE", {"error": "No Dockerfile found"})
              return
 
-        # 3. Zip Repository
+        # 4. Zip Repository
         logger.info("Zipping repository...")
         zip_directory(temp_dir, archive_path)
         
-        # 4. Upload to GCS
+        # 5. Upload to GCS
         storage_client = storage.Client(project=settings.gcp_project_id)
         bucket_name = settings.gcp_storage_bucket
         
-        # Ensure bucket exists (best effort)
         try:
              bucket = storage_client.get_bucket(bucket_name)
         except Exception:
@@ -64,16 +85,14 @@ def build_and_push_task(github_url: str, request_id: str):
         logger.info(f"Uploading source to gs://{bucket_name}/{blob_name}")
         blob.upload_from_filename(archive_path)
 
-        # 5. Trigger Cloud Build
+        # 6. Trigger Cloud Build
         build_client = cloudbuild_v1.CloudBuildClient()
         
         repo_name = github_url.split("/")[-1].replace(".git", "")
-        # {REGION}-docker.pkg.dev/{PROJECT_ID}/{REPOSITORY}/{IMAGE_NAME}:{TAG}
         image_tag = f"{settings.gcp_region}-docker.pkg.dev/{settings.gcp_project_id}/{settings.gar_repository_name}/{repo_name}:{request_id}"
         
         build = cloudbuild_v1.Build()
         
-        # Define the build steps
         build.steps = [
             {
                 "name": "gcr.io/cloud-builders/docker",
@@ -98,41 +117,34 @@ def build_and_push_task(github_url: str, request_id: str):
         operation = build_client.create_build(project_id=settings.gcp_project_id, build=build)
         
         logger.info(f"Cloud Build triggered: {operation.metadata.build.id}")
-        logger.info(f"Build logs: {operation.metadata.build.log_url}")
-
-        # Wait for the build to complete
+        
+        # Wait for completion
         logger.info("Waiting for build to complete...")
         result = operation.result() 
         logger.info(f"Build finished status: {result.status}")
 
-        # 6. Save to Firestore on Success
         if result.status == cloudbuild_v1.Build.Status.SUCCESS:
-             try:
-                 db = firestore.Client(project=settings.gcp_project_id)
-                 doc_ref = db.collection("deployments").document(request_id)
-                 doc_ref.set({
-                     "request_id": request_id,
-                     "github_url": github_url,
-                     "image_tag": image_tag,
-                     "status": "SUCCESS",
-                     "build_id": operation.metadata.build.id,
-                     "timestamp": datetime.datetime.now(datetime.timezone.utc)
-                 })
-                 logger.info(f"Saved deployment info to Firestore: deployments/{request_id}")
-             except Exception as e:
-                 logger.error(f"Failed to save to Firestore: {e}")
+             update_firestore_status(request_id, "SUCCESS", {
+                 "image_tag": image_tag,
+                 "build_id": operation.metadata.build.id
+             })
+        else:
+             update_firestore_status(request_id, "FAILURE", {
+                 "build_id": operation.metadata.build.id,
+                 "error": f"Cloud Build failed with status: {result.status}"
+             })
         
         # Cleanup GCS blob
         try:
-            logger.info(f"Deleting source blob: {blob_name}")
             blob.delete()
         except Exception as e:
             logger.warning(f"Failed to delete source blob {blob_name}: {e}")
 
     except Exception as e:
         logger.error(f"Build failed: {e}")
+        update_firestore_status(request_id, "FAILURE", {"error": str(e)})
     finally:
-        # Cleanup
+        # Cleanup local files
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
         if os.path.exists(archive_path):
@@ -147,15 +159,36 @@ def deploy():
     github_url = data['github_url']
     request_id = str(uuid.uuid4())
     
-    # Run the build task in a separate thread
+    # 1. Initial write to Firestore
+    update_firestore_status(request_id, "PENDING", {
+        "request_id": request_id,
+        "github_url": github_url
+    })
+    
+    # 2. Start background thread
     thread = threading.Thread(target=build_and_push_task, args=(github_url, request_id))
     thread.start()
     
     return jsonify({
-        "message": "Deployment started via Cloud Build",
+        "message": "Deployment started",
         "request_id": request_id,
-        "repo": github_url
+        "status_url": f"/status/{request_id}"
     })
+
+@app.route("/status/<request_id>", methods=["GET"])
+def check_status(request_id):
+    try:
+        db = firestore.Client(project=settings.gcp_project_id)
+        doc_ref = db.collection("deployments").document(request_id)
+        doc = doc_ref.get()
+        
+        if doc.exists:
+            return jsonify(doc.to_dict())
+        else:
+            return jsonify({"error": "Deployment not found"}), 404
+    except Exception as e:
+        logger.error(f"Failed to fetch status: {e}")
+        return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
