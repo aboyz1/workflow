@@ -52,7 +52,7 @@ def update_firestore_status(request_id, status, metadata=None):
     except Exception as e:
         logger.error(f"Failed to update Firestore for {request_id}: {e}")
 
-def build_and_push_task(github_url: str, request_id: str, workflow_name: str, user_id: str):
+def build_and_push_task(github_url: str, request_id: str, workflow_name: str, user_id: str, description: str):
 
 
     temp_dir = f"temp_build_{request_id}"
@@ -63,8 +63,10 @@ def build_and_push_task(github_url: str, request_id: str, workflow_name: str, us
     # 1. Update status to IN_PROGRESS
     update_firestore_status(request_id, "IN_PROGRESS", {
         "workflow_name": workflow_name,
-        "user_id": user_id
+        "user_id": user_id,
+        "description": description
     })
+
 
 
 
@@ -173,6 +175,7 @@ def deploy():
     github_url = data['github_url']
     workflow_name = data.get('workflow_name', 'unnamed')
     user_id = data.get('userId', 'anonymous')
+    description = data.get('description', '')
     request_id = str(uuid.uuid4())
     
     # 1. Initial write to Firestore
@@ -180,12 +183,14 @@ def deploy():
         "request_id": request_id,
         "github_url": github_url,
         "workflow_name": workflow_name,
-        "user_id": user_id
+        "user_id": user_id,
+        "description": description
     })
     
     # 2. Start background thread
-    thread = threading.Thread(target=build_and_push_task, args=(github_url, request_id, workflow_name, user_id))
+    thread = threading.Thread(target=build_and_push_task, args=(github_url, request_id, workflow_name, user_id, description))
     thread.start()
+
 
 
     
