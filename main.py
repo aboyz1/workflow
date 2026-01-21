@@ -64,8 +64,7 @@ def build_and_push_task(github_url: str, request_id: str, workflow_name: str, us
     update_firestore_status(request_id, "IN_PROGRESS", {
         "workflow_name": workflow_name,
         "user_id": user_id,
-        "description": description,
-        "isPublic": is_public
+        "description": description
     })
 
 
