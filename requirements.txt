@@ -5,3 +5,4 @@ GitPython
 google-cloud-build
 google-cloud-storage
 google-cloud-firestore
+flask-cors

@@ -6,6 +6,7 @@ import zipfile
 import threading
 import datetime
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import git
 from google.cloud.devtools import cloudbuild_v1
 from google.cloud import storage
@@ -13,6 +14,10 @@ from google.cloud import firestore
 from config import settings
 
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": [
+    "https://studio.firebase.google.com",
+    "https://dev--perd-fd33f.europe-west4.hosted.app"
+]}})
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
