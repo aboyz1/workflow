@@ -1,6 +1,6 @@
-fastapi
-uvicorn
+flask
+gunicorn
+python-dotenv
 GitPython
-pydantic-settings
 google-cloud-build
 google-cloud-storage

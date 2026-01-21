@@ -3,21 +3,18 @@ import shutil
 import uuid
 import logging
 import zipfile
-from fastapi import FastAPI, BackgroundTasks, HTTPException
-from pydantic import BaseModel, HttpUrl
+import threading
+from flask import Flask, request, jsonify
 import git
 from google.cloud.devtools import cloudbuild_v1
 from google.cloud import storage
 from config import settings
 
-app = FastAPI()
+app = Flask(__name__)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-class DeployRequest(BaseModel):
-    github_url: HttpUrl
 
 def zip_directory(folder_path, output_path):
     """Zips the contents of a directory."""
@@ -102,8 +99,6 @@ def build_and_push_task(github_url: str, request_id: str):
         logger.info(f"Build logs: {operation.metadata.build.log_url}")
 
         # Wait for the build to complete to ensure we can safely delete the source
-        # This blocks the background task worker, but ensures cleanup.
-        # Given high volume, consider scaling workers or using a separate cleaner if this becomes a bottleneck.
         logger.info("Waiting for build to complete...")
         result = operation.result() 
         logger.info(f"Build finished status: {result.status}")
@@ -115,7 +110,6 @@ def build_and_push_task(github_url: str, request_id: str):
         except Exception as e:
             logger.warning(f"Failed to delete source blob {blob_name}: {e}")
 
-
     except Exception as e:
         logger.error(f"Build failed: {e}")
     finally:
@@ -125,13 +119,24 @@ def build_and_push_task(github_url: str, request_id: str):
         if os.path.exists(archive_path):
             os.remove(archive_path)
 
-@app.post("/deploy")
-async def deploy(request: DeployRequest, background_tasks: BackgroundTasks):
+@app.route("/deploy", methods=["POST"])
+def deploy():
+    data = request.get_json()
+    if not data or 'github_url' not in data:
+        return jsonify({"error": "Missing github_url"}), 400
+
+    github_url = data['github_url']
     request_id = str(uuid.uuid4())
-    background_tasks.add_task(build_and_push_task, str(request.github_url), request_id)
     
-    return {
+    # Run the build task in a separate thread
+    thread = threading.Thread(target=build_and_push_task, args=(github_url, request_id))
+    thread.start()
+    
+    return jsonify({
         "message": "Deployment started via Cloud Build",
         "request_id": request_id,
-        "repo": str(request.github_url)
-    }
+        "repo": github_url
+    })
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))

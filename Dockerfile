@@ -10,5 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Render exposes PORT env var, we must bind to it
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Use Gunicorn to serve the Flask app
+# Workers: 1 (limit concurrency per instance if desired, or increase)
+# Threads: 8 (handle multiple IO-bound requests)
+# Timeout: 0 (allow long running requests if needed, though we use threads)
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app
