@@ -4,3 +4,4 @@ python-dotenv
 GitPython
 google-cloud-build
 google-cloud-storage
+google-cloud-firestore

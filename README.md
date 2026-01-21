@@ -1,6 +1,6 @@
-# GAR Deploy Service (Render Edition)
+# GAR Deploy Service (Flask Edition)
 
-A standard FastAPI service to deploy Docker images from a GitHub repository to Google Artifact Registry using **Google Cloud Build**. This architecture is compatible with PaaS providers like Render, Heroku, or Rail that do not support privileged Docker execution.
+A standard Flask service to deploy Docker images from a GitHub repository to Google Artifact Registry using **Google Cloud Build**.
 
 ## How it Works
 
@@ -8,6 +8,8 @@ A standard FastAPI service to deploy Docker images from a GitHub repository to G
 2.  **Clone & Zip**: Clones the repo locally and creates a zip archive.
 3.  **Upload**: Uploads the zip to Google Cloud Storage (GCS).
 4.  **Build**: Triggers Google Cloud Build to pull the zip from GCS and build/push the Docker image to GAR.
+5.  **Record**: Saves deployment details (image tag, ID, status) to **Firestore** upon success.
+6.  **Cleanup**: Deletes the source zip from GCS.
 
 ## Prerequisites
 
@@ -15,12 +17,15 @@ A standard FastAPI service to deploy Docker images from a GitHub repository to G
     -   Enable **Cloud Build API**.
     -   Enable **Cloud Storage API**.
     -   Enable **Artifact Registry API**.
-2.  **Service Account**:
+    -   Enable **Cloud Firestore API**.
+2.  **Database**:
+    -   Create a Firestore database (Native mode recommended) in your project.
+3.  **Service Account**:
     -   Create a Service Account.
-    -   **Roles**:
-        -   `Cloud Build Editor` (to trigger builds)
-        -   `Storage Object Admin` (to upload source code)
-        -   `Service Account User` (to act as the build service account)
+    -   **Cloud Build Editor** (to trigger builds)
+    -   **Storage Object Admin** (to upload source code)
+    -   **Cloud Datastore User** (to write to Firestore)
+    -   **Service Account User** (to act as the build service account)
     -   **Keys**: Generate a JSON key file.
 
 ## Setup on Render
@@ -35,8 +40,6 @@ A standard FastAPI service to deploy Docker images from a GitHub repository to G
     | `GCP_REGION` | `us-central1` | Region for GAR and Cloud Build |
     | `GAR_REPOSITORY_NAME` | `your-repo` | Name of the Artifact Registry repo |
     | `GCP_STORAGE_BUCKET` | `perd-fd33f.firebasestorage.app` | (Optional) Staging bucket for source code. Defaults to `perd-fd33f.firebasestorage.app` |
-
-
     | `GOOGLE_APPLICATION_CREDENTIALS` | `/etc/secrets/google-credentials.json` | Path to the secret credential file (see below) |
 
 3.  **Secret File**:
@@ -55,5 +58,5 @@ export GCP_PROJECT_ID="job-runner-prod"
 # ...
 
 # Run
-uvicorn main:app --reload
+gunicorn --bind :8080 main:app
 ```

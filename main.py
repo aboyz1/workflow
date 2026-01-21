@@ -4,10 +4,12 @@ import uuid
 import logging
 import zipfile
 import threading
+import datetime
 from flask import Flask, request, jsonify
 import git
 from google.cloud.devtools import cloudbuild_v1
 from google.cloud import storage
+from google.cloud import firestore
 from config import settings
 
 app = Flask(__name__)
@@ -98,10 +100,27 @@ def build_and_push_task(github_url: str, request_id: str):
         logger.info(f"Cloud Build triggered: {operation.metadata.build.id}")
         logger.info(f"Build logs: {operation.metadata.build.log_url}")
 
-        # Wait for the build to complete to ensure we can safely delete the source
+        # Wait for the build to complete
         logger.info("Waiting for build to complete...")
         result = operation.result() 
         logger.info(f"Build finished status: {result.status}")
+
+        # 6. Save to Firestore on Success
+        if result.status == cloudbuild_v1.Build.Status.SUCCESS:
+             try:
+                 db = firestore.Client(project=settings.gcp_project_id)
+                 doc_ref = db.collection("deployments").document(request_id)
+                 doc_ref.set({
+                     "request_id": request_id,
+                     "github_url": github_url,
+                     "image_tag": image_tag,
+                     "status": "SUCCESS",
+                     "build_id": operation.metadata.build.id,
+                     "timestamp": datetime.datetime.now(datetime.timezone.utc)
+                 })
+                 logger.info(f"Saved deployment info to Firestore: deployments/{request_id}")
+             except Exception as e:
+                 logger.error(f"Failed to save to Firestore: {e}")
         
         # Cleanup GCS blob
         try:
