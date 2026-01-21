@@ -52,7 +52,8 @@ def update_firestore_status(request_id, status, metadata=None):
     except Exception as e:
         logger.error(f"Failed to update Firestore for {request_id}: {e}")
 
-def build_and_push_task(github_url: str, request_id: str, workflow_name: str):
+def build_and_push_task(github_url: str, request_id: str, workflow_name: str, user_id: str):
+
 
     temp_dir = f"temp_build_{request_id}"
     archive_path = f"{temp_dir}.zip"
@@ -60,7 +61,11 @@ def build_and_push_task(github_url: str, request_id: str, workflow_name: str):
     logger.info(f"Starting build task for {github_url} with ID {request_id}")
     
     # 1. Update status to IN_PROGRESS
-    update_firestore_status(request_id, "IN_PROGRESS", {"workflow_name": workflow_name})
+    update_firestore_status(request_id, "IN_PROGRESS", {
+        "workflow_name": workflow_name,
+        "user_id": user_id
+    })
+
 
 
     try:
@@ -167,18 +172,21 @@ def deploy():
 
     github_url = data['github_url']
     workflow_name = data.get('workflow_name', 'unnamed')
+    user_id = data.get('userId', 'anonymous')
     request_id = str(uuid.uuid4())
     
     # 1. Initial write to Firestore
     update_firestore_status(request_id, "PENDING", {
         "request_id": request_id,
         "github_url": github_url,
-        "workflow_name": workflow_name
+        "workflow_name": workflow_name,
+        "user_id": user_id
     })
     
     # 2. Start background thread
-    thread = threading.Thread(target=build_and_push_task, args=(github_url, request_id, workflow_name))
+    thread = threading.Thread(target=build_and_push_task, args=(github_url, request_id, workflow_name, user_id))
     thread.start()
+
 
     
     return jsonify({
