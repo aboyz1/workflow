@@ -102,7 +102,7 @@ def build_and_push_task(github_url: str, request_id: str, workflow_name: str, us
         # 6. Trigger Cloud Build
         build_client = cloudbuild_v1.CloudBuildClient()
         
-        repo_name = github_url.split("/")[-1].replace(".git", "")
+        repo_name = github_url.split("/")[-1].replace(".git", "").lower()
         image_tag = f"{settings.gcp_region}-docker.pkg.dev/{settings.gcp_project_id}/{settings.gar_repository_name}/{repo_name}:{request_id}"
         
         build = cloudbuild_v1.Build()
