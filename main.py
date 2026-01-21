@@ -16,7 +16,8 @@ from config import settings
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": [
     "https://studio.firebase.google.com",
-    "https://dev--perd-fd33f.europe-west4.hosted.app"
+    "https://dev--perd-fd33f.europe-west4.hosted.app",
+    "https://6000-firebase-studio-1753801228661.cluster-lu4mup47g5gm4rtyvhzpwbfadi.cloudworkstations"
 ]}})
 
 # Configure logging
