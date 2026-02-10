@@ -39,7 +39,7 @@ A standard Flask service to deploy Docker images from a GitHub repository to Goo
     | `GCP_PROJECT_ID` | `your-project-id` | Your Google Cloud Project ID |
     | `GCP_REGION` | `us-central1` | Region for GAR and Cloud Build |
     | `GAR_REPOSITORY_NAME` | `your-repo` | Name of the Artifact Registry repo |
-    | `GCP_STORAGE_BUCKET` | `perd-fd33f.firebasestorage.app` | (Optional) Staging bucket for source code. Defaults to `perd-fd33f.firebasestorage.app` |
+    | `GCP_STORAGE_BUCKET` | `your-storage-bucket` | (Optional) Staging bucket for source code` |
     | `GOOGLE_APPLICATION_CREDENTIALS` | `/etc/secrets/google-credentials.json` | Path to the secret credential file (see below) |
 
 3.  **Secret File**:
